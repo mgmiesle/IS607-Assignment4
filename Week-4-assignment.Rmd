@@ -1,0 +1,117 @@
+---
+title: "Week-4-assignment"
+author: "Matthew Miesle"
+date: "Monday, September 22, 2014"
+output: html_document
+---
+
+## The posed question:
+Which year were the best popular movies made?
+
+## The dataset being used
+Found here: <http://had.co.nz/data/movies/>
+
+## Defining "best" and "popular"
+* Popular will be defined as higher number of votes sumbmitted for a movie.  More votes should mean more views.
+* Best will be defined as highest user ratings.  
+
+## Broad Algorithm Outline
+1.  Identify which movies are popular for each year
+2.  Find the average rating for the popular movies for each year
+
+## Final Answer:
+The year that has the highest average rating for the popular movies will be considered the year that has the best popular movies.
+
+## Detailed Algorithm
+
+### Step 1
+Loading data, limiting it to a smaller data frame, creating a vector of all years that movies were released:
+
+```{r}
+filelocation <- "C:/Users/MattM/Downloads/movies.tab.gz"
+movie.data <- read.table(filelocation, sep="\t", header=TRUE, quote="", comment="", stringsAsFactors = FALSE)
+
+slim.movie.data <- movie.data[, c(1, 2, 5, 6)]
+
+yearlist <- slim.movie.data$year[!duplicated(slim.movie.data$year)]
+yearlist <- sort(yearlist, decreasing = FALSE)
+```
+
+### Step 2
+Creating a function that determines what the most popular movies are for each year.  The popular movies for each year are stored in a data frame.
+
+A line must be drawn to determine which movies are popular in a year.  The function can take input for percentile (pctile) which draws this line.  The default percentile is set to 99.
+
+```{r}
+pop.movies.votes <- function(year, pctile = 0.99)
+{
+    df <- slim.movie.data[slim.movie.data$year == year, ]
+    top.votes <- sort(df$votes, decreasing = TRUE)
+    if (length(top.votes) * (1 - pctile) <1)
+    {
+        top.votes <- top.votes[1]
+    }else
+    {
+        top.votes <- top.votes[1:(floor(length(top.votes) * (1 - pctile)))]   
+    }
+    top.votes <- unique(top.votes)
+    
+    df <- df[df$votes %in% top.votes, ]
+}
+```
+
+### Step 3
+Perform the function from **Step 2** taking all the inputs from the yearlist and store them in a list.
+
+```{r}
+pop.movies.of.each.year <- lapply(yearlist, pop.movies.votes)
+```
+
+### Step 4
+Create a function that determines the average rating for all the movies in a dataframe and returns a dataframe containing the year and the average rating.
+
+```{r}
+avg.rating <- function(df)
+{
+    data.frame(df$year[1], mean(df$rating))
+}
+```
+
+### Step 5
+Use the ldply() function from the plyr package to perform the function from **Step 4** to each data frame of movies from each year and return the results in a data frame.  The column names are also assigned to the resulting data frame for simpler referencing of the data frame.
+
+```{r}
+library(plyr)
+rating.pop.movies.yearly <- ldply(pop.movies.of.each.year, avg.rating)
+names(rating.pop.movies.yearly) <- c("year", "avg.rating")
+```
+
+### Step 6
+The year(s) with the most popular movies is revealed in this step.
+
+```{r}
+(best.pop.movie.year <- rating.pop.movies.yearly[rating.pop.movies.yearly$avg.rating == 
+                                                    max(rating.pop.movies.yearly$avg.rating), 1])
+```
+
+### Step 7
+A bar graph is provided to display how each year's popular movies were rated on average.
+
+
+```{r}
+library(ggplot2)
+avg.rating.barplot <- qplot(x = year, y = avg.rating, data = rating.pop.movies.yearly,
+                       geom = "bar", stat = "identity") + 
+                        ggtitle("Avg rating for popular movies of each year")
+avg.rating.barplot
+```
+
+## Conclusion
+Based on the code run, the popular movies from 1957 are considered the best.  Looking at the movies from 1957 and their rating, this seems like a pretty reasonable claim (as seen below).  However, I found that changing the percentile parameter can make a significant impact on results.  Years in which more movies were released might be at a bit of a disadvantage with this model.  There are some movies that are much more popular in a given year. Perhaps a model that utilizes the percentage of votes for movies of that year is a good alternative.  Of course, determining the appropriate percentage can be as subjective as the current method.
+
+```{r, echo=FALSE}
+    pop.movies.of.each.year[[1957-1893+1]]
+```
+
+
+An alternative algorithm considered after completion of the above algorithm is to do a sort of weighting systems in which, for each year, the rating of a movie is multiplied by the number of votes, those numbers summed up, and then divide by the number of votes for that year.  This would mean the more popular movies would make a larger impact on the rating of movies of that year.  This algorithm could be impacted by some unexpected scenarios, but could yield more objective results.  However, it takes into consideration all movies, not just popular movies.
